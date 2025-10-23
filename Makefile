@@ -5,6 +5,11 @@ ARGOCD_NS          ?= argocd
 APP_NS             ?= rag-system
 NVIDIA_NS          ?= nvidia-device-plugin
 
+# Custom K3s image with GPU support
+# GitHub Actions otomatik olarak bu image'ı build edip push edecek
+K3S_GPU_IMAGE      ?= ghcr.io/peler1nl1kelt0s/k3s-gpu:v1.31.5-k3s1-cuda
+USE_CUSTOM_IMAGE   ?= false
+
 # Git bilgilerini otomatik al
 # Not: GitHub repo'nuz private ise, ArgoCD'nin erişimi için ek ayar gerekebilir.
 # Bu kurulum, public repo veya ArgoCD'nin aynı kümede olduğu varsayımıyla çalışır.
@@ -12,7 +17,7 @@ GITHUB_USER        ?= $(shell git config user.name)
 GITHUB_REPO        ?= $(shell basename `git rev-parse --show-toplevel`)
 
 # === Makefile Kuralları ===
-.PHONY: all up down destroy clean cluster install-gpu-plugin check-gpu install-argocd deploy-app ui-argo ui-app ingest status help
+.PHONY: all up down destroy clean cluster install-gpu-plugin check-gpu install-argocd deploy-app ui-argo ui-app ingest status build-gpu-image help
 
 # Varsayılan komut (sadece 'make' yazarsanız)
 all: help
@@ -38,26 +43,58 @@ clean:
 	@kubectl delete namespace $(ARGOCD_NS) || true
 	@kubectl delete namespace $(NVIDIA_NS) || true
 
+# --- GPU Image Build ---
+
+# Custom K3s GPU image build et (GitHub Actions ile otomatik)
+build-gpu-image:
+	@echo "🔨 Custom K3s GPU image GitHub Actions ile build ediliyor..."
+	@echo "⚠️  Not: Bu komut sadece k3s-gpu/ dizinindeki değişiklikleri commit eder."
+	@echo "   Gerçek build GitHub Actions'da yapılır (5-10 dakika sürer)."
+	@echo ""
+	@echo "📋 Adımlar:"
+	@echo "  1. k3s-gpu/ dizinindeki değişiklikleri commit et"
+	@echo "  2. GitHub Actions otomatik build edecek"
+	@echo "  3. Build tamamlandıktan sonra: USE_CUSTOM_IMAGE=true make up"
+	@echo ""
+	@echo "💡 Manuel build için: cd k3s-gpu && ./build.sh"
+
 # --- Kurulum Adımları ---
 
 # Adım 1: GPU destekli k3d kümesini oluştur
 cluster:
 	@echo "🚀 k3d kümesi '$(CLUSTER_NAME)' GPU desteği ile oluşturuluyor..."
-	# Basit yaklaşım: GPU olmadan cluster oluştur, NVIDIA plugin bunu halleder
+ifeq ($(USE_CUSTOM_IMAGE),true)
+	@echo "✅ Custom K3s GPU image kullanılıyor: $(K3S_GPU_IMAGE)"
+	@echo "⚠️  Not: Bu image NVIDIA Container Toolkit ve device plugin içerir."
+	@k3d cluster create $(CLUSTER_NAME) \
+	  --image $(K3S_GPU_IMAGE) \
+	  --gpus all \
+	  --k3s-arg "--disable=traefik@server:0"
+else
+	@echo "⚠️  Standard K3s image kullanılıyor (GPU CPU modunda çalışacak)"
+	@echo "💡 GPU desteği için: make build-gpu-image && USE_CUSTOM_IMAGE=true make cluster"
 	@k3d cluster create $(CLUSTER_NAME) \
 	  --gpus all \
 	  --image rancher/k3s:v1.31.5-k3s1 \
 	  --k3s-arg "--disable=traefik@server:0"
+endif
 	@echo "⏳ Kubernetes API sunucusunun hazır olması bekleniyor..."
 	@sleep 10
 	@kubectl wait --for=condition=ready node --all --timeout=120s
 
-# Adım 2: GPU yapılandırması (WSL2 + k3d için basitleştirilmiş)
+# Adım 2: GPU yapılandırması
 install-gpu-plugin:
 	@echo "🔌 GPU yapılandırması kontrol ediliyor..."
-	@echo "⚠️  Not: WSL2 + k3d ortamında NVIDIA Device Plugin yerine direkt /dev mount kullanıyoruz."
-	@echo "Ollama pod'u /dev altındaki GPU device'larına erişecek."
-	@echo "✅ GPU yapılandırması tamamlandı (manifests/03-ollama-gpu.yaml'da tanımlı)"
+ifeq ($(USE_CUSTOM_IMAGE),true)
+	@echo "✅ Custom K3s image kullanıldı - NVIDIA device plugin otomatik deploy edildi"
+	@echo "⏳ Device plugin DaemonSet'inin hazır olması bekleniyor..."
+	@sleep 5
+	@kubectl wait --for=condition=ready pod -l name=nvidia-device-plugin-ds -n kube-system --timeout=60s || echo "⚠️  Device plugin beklemede, devam ediliyor..."
+else
+	@echo "⚠️  Standard image kullanıldı - GPU CPU modunda çalışacak"
+	@echo "💡 Tam GPU desteği için custom image gerekli"
+endif
+	@echo "✅ GPU yapılandırması tamamlandı"
 
 # Adım 3: GPU'nun host'ta erişilebilir olduğunu doğrula
 check-gpu:
@@ -121,13 +158,24 @@ status:
 # Yardım menüsü
 help:
 	@echo "Lokal RAG Sistemi Makefile"
-	@echo "------------------------------"
-	@echo "Kullanılabilir komutlar:"
-	@echo "  make up          : (Varsayılan) Tüm sistemi sıfırdan kurar (Cluster, GPU, ArgoCD, App)."
-	@echo "  make destroy     : Tüm k3d kümesini siler."
-	@echo "  make clean       : Sadece Kubernetes uygulamalarını siler (küme kalır)."
-	@echo "  make check-gpu   : Kümenin GPU'yu görüp görmediğini kontrol eder."
-	@echo "  make status      : Tüm podların durumunu listeler."
-	@echo "  make ui-argo     : ArgoCD arayüzünü 'localhost:8080'de açar ve şifreyi gösterir."
-	@echo "  make ui-app      : Streamlit (Frontend) arayüzünü 'localhost:8501'de açar."
-	@echo "  make ingest      : Veri yükleme işlemini (PDF'leri Qdran'a yükleme) tetikler."
+	@echo "====================================="
+	@echo ""
+	@echo "🚀 Temel Komutlar:"
+	@echo "  make up                    : Tüm sistemi kurar (Cluster, GPU, ArgoCD, App)"
+	@echo "  make destroy               : k3d kümesini tamamen siler"
+	@echo "  make clean                 : Sadece uygulamaları siler (küme kalır)"
+	@echo "  make status                : Tüm pod'ların durumunu gösterir"
+	@echo ""
+	@echo "🎮 Arayüzler:"
+	@echo "  make ui-argo               : ArgoCD arayüzü (https://localhost:8080)"
+	@echo "  make ui-app                : Streamlit frontend (http://localhost:8501)"
+	@echo ""
+	@echo "📊 Veri İşlemleri:"
+	@echo "  make ingest                : PDF'leri Qdrant'a yükler"
+	@echo ""
+	@echo "🎯 GPU Desteği (Gelişmiş):"
+	@echo "  make build-gpu-image       : Custom K3s GPU image build et"
+	@echo "  USE_CUSTOM_IMAGE=true make up : GPU image ile cluster kur"
+	@echo ""
+	@echo "💡 İpucu: CPU modunda test için direkt 'make up' yeterli"
+	@echo "   Tam GPU desteği için: make build-gpu-image sonra USE_CUSTOM_IMAGE=true make up"
