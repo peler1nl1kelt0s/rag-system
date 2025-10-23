@@ -33,12 +33,9 @@ try:
     llm = Ollama(model=MODEL_NAME, base_url=OLLAMA_URL)
     
     logger.info(f"Qdrant veritabanına bağlanılıyor: {QDRANT_URL}")
-    qdrant_client = Qdrant.from_existing_collection(
-        embedding=embeddings,
-        collection_name=COLLECTION_NAME,
-        url=QDRANT_URL,
-    )
-    logger.info("Bağlantılar başarılı.")
+    # İlk başta koleksiyon olmayabilir, /ingest çağrısında oluşturulacak
+    qdrant_client = None
+    logger.info("Model bağlantıları hazır. Qdrant koleksiyonu /ingest ile oluşturulacak.")
 
 except Exception as e:
     logger.error(f"Başlangıçta hata oluştu: {e}")
@@ -109,12 +106,14 @@ async def ingest_data():
             force_recreate=True, # Her seferinde koleksiyonu yeniden oluştur (veya mevcutsa update et)
         )
         
-        # Global istemciyi yeniden başlat
+        # Global istemciyi başlat
         global qdrant_client
-        qdrant_client = Qdrant.from_existing_collection(
-            embedding=embeddings,
+        from qdrant_client import QdrantClient
+        client = QdrantClient(url=QDRANT_URL)
+        qdrant_client = Qdrant(
+            client=client,
             collection_name=COLLECTION_NAME,
-            url=QDRANT_URL,
+            embeddings=embeddings
         )
         
         logger.info("Veri başarıyla yüklendi ve Qdrant'a aktarıldı.")
