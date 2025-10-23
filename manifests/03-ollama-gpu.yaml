@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: rag-system # rag-system namespace'ine kur
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+        resources:
+          limits:
+            # === DİKKAT! ===
+            # Burası Kubernetes'ten 1 adet NVIDIA GPU'su talep eder.
+            # Aşama 1'deki NVIDIA Device Plugin kurulumu sayesinde bu çalışır.
+            nvidia.com/gpu: 1
+        # Modeli ilk açılışta çekmesi için:
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh", "-c", "ollama pull qwen"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-service
+  namespace: rag-system
+spec:
+  type: ClusterIP
+  selector:
+    app: ollama
+  ports:
+  - port: 11434
+    targetPort: 11434

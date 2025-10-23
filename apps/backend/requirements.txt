@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+qdrant-client
+langchain
+langchain-community
+ollama
+pypdf

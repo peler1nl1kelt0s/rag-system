@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-frontend
+  namespace: rag-system # rag-system namespace'ine kur
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rag-frontend
+  template:
+    metadata:
+      labels:
+        app: rag-frontend
+    spec:
+      containers:
+      - name: frontend
+        # DİKKAT: Burayı kendi GHCR adresinizle değiştirin
+        image: ghcr.io/peler1nl1kelt0s/rag-system-frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8501
+        env:
+        - name: BACKEND_URL
+          value: "http://rag-backend-service.rag-system.svc.cluster.local:8000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rag-frontend-service
+  namespace: rag-system
+spec:
+  type: ClusterIP 
+  selector:
+    app: rag-frontend
+  ports:
+  - port: 8501
+    targetPort: 8501
