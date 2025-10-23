@@ -3,6 +3,7 @@ FROM python:3.10-slim
 WORKDIR /app
 
 COPY requirements.txt .
+# YORUM SATIRI ALOOOOO
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY ./apache_pdfs /data/
