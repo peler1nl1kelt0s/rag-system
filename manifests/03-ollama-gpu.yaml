@@ -21,14 +21,35 @@ spec:
         resources:
           limits:
             # === DİKKAT! ===
-            # Burası Kubernetes'ten 1 adet NVIDIA GPU'su talep eder.
-            # Aşama 1'deki NVIDIA Device Plugin kurulumu sayesinde bu çalışır.
-            nvidia.com/gpu: 1
+            # WSL2 + k3d ortamında GPU device discovery sorunu var.
+            # GPU talep etmeden çalıştırıyoruz. Ollama otomatik olarak GPU'yu tespit edecek.
+            # GPU kullanılamıyorsa CPU modunda çalışacak (yavaş ama işlevsel).
+            # nvidia.com/gpu: 1  # Şimdilik devre dışı
+            memory: "4Gi"
+            cpu: "2"
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: NVIDIA_DRIVER_CAPABILITIES
+          value: "compute,utility"
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: dev
+          mountPath: /dev
         # Modeli ilk açılışta çekmesi için:
         lifecycle:
           postStart:
             exec:
               command: ["/bin/sh", "-c", "ollama pull qwen"]
+      volumes:
+      - name: dev
+        hostPath:
+          path: /dev
+          type: Directory
 ---
 apiVersion: v1
 kind: Service
