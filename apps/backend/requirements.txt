@@ -3,5 +3,6 @@ uvicorn[standard]
 qdrant-client
 langchain
 langchain-community
+langchain-text-splitters
 ollama
 pypdf

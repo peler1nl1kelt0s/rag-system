@@ -6,7 +6,7 @@ from langchain_community.vectorstores import Qdrant
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.llms import Ollama
 from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 import logging
 
 logging.basicConfig(level=logging.INFO)
