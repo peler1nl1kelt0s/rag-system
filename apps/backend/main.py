@@ -9,7 +9,6 @@ from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import logging
 
-# Loglamayı ayarla
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
