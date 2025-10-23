@@ -34,6 +34,7 @@ jobs:
           context: ./apps/backend
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ github.event.repository.name }}-backend:latest
+          no-cache: true
 
       - name: Build and push Frontend
         uses: docker/build-push-action@v5
