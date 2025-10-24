@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: rag-frontend
-  namespace: rag-system # rag-system namespace'ine kur
+  namespace: rag-system
 spec:
   replicas: 1
   selector:
@@ -15,11 +15,17 @@ spec:
     spec:
       containers:
       - name: frontend
-        # DİKKAT: Burayı kendi GHCR adresinizle değiştirin
         image: ghcr.io/peler1nl1kelt0s/rag-system-frontend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8501
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "0.5"
+          requests:
+            memory: "512Mi"
+            cpu: "0.25"
         env:
         - name: BACKEND_URL
           value: "http://rag-backend-service.rag-system.svc.cluster.local:8000"

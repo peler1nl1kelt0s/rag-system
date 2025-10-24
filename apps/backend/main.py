@@ -8,23 +8,27 @@ from langchain_community.llms import Ollama
 from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import logging
+from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.INFO)
+# Load environment variables from .env file
+load_dotenv()
+
+# Configure logging
+log_level = os.environ.get("DEBUG_MODE", "false").lower() == "true"
+logging.basicConfig(level=logging.DEBUG if log_level else logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Lokal RAG Pipeline API",
-    description="Apache dökümanları için RAG API"
+    title="Ubuntu RAG Pipeline API",
+    description="Apache dökümanları için RAG API (K3s + GPU)"
 )
 
-# Kubernetes servis adreslerini kullan (ortam değişkenlerinden almak daha iyidir)
+# Environment variables from .env file
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant-service.rag-system.svc.cluster.local:6333")
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://ollama-service.rag-system.svc.cluster.local:11434")
-
-# PDF'lerin Docker imajı içinde kopyalandığı yer
-DATA_PATH = "/data/"
-COLLECTION_NAME = "apache_docs"
-MODEL_NAME = "qwen" # GPU'da çalışacak model
+DATA_PATH = os.environ.get("DATA_PATH", "/data/")
+COLLECTION_NAME = os.environ.get("COLLECTION_NAME", "apache_docs")
+MODEL_NAME = os.environ.get("MODEL_NAME", "qwen")
 
 # Global olarak modelleri ve veritabanı bağlantısını başlat
 try:

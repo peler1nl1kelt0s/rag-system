@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ollama
-  namespace: rag-system # rag-system namespace'ine kur
+  namespace: rag-system
 spec:
   replicas: 1
   selector:
@@ -31,6 +31,11 @@ spec:
           postStart:
             exec:
               command: ["/bin/sh", "-c", "ollama pull qwen"]
+        env:
+        - name: OLLAMA_HOST
+          value: "0.0.0.0"
+        - name: OLLAMA_ORIGINS
+          value: "*"
 ---
 apiVersion: v1
 kind: Service

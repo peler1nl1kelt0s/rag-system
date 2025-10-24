@@ -20,7 +20,7 @@ spec:
       labels:
         name: nvidia-device-plugin-ds
     spec:
-      runtimeClassName: nvidia # Explicitly request the runtime
+      runtimeClassName: nvidia
       tolerations:
       - key: nvidia.com/gpu
         operator: Exists

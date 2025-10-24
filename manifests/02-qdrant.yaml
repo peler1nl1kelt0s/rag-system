@@ -54,7 +54,8 @@ metadata:
   namespace: rag-system
 spec:
   accessModes:
-    - ReadWriteOnce # Tek bir node tarafından okunup yazılabilir (lokal için yeterli)
+    - ReadWriteOnce
+  storageClassName: local-path
   resources:
     requests:
-      storage: 5Gi # 5 GB depolama alanı (PDF sayınıza göre artırın)
+      storage: 5Gi

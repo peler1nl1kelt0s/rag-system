@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: lokal-rag-sistemi
+  name: ubuntu-rag-sistemi
   namespace: argocd
 spec:
   project: default

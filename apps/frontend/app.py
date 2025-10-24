@@ -1,15 +1,18 @@
 import streamlit as st
 import requests
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 st.set_page_config(layout="wide")
-st.title("Lokal RAG Asistanı (Apache Dökümanları) 🤖")
-st.caption("GPU üzerinde çalışan Qwen modeli ve Qdrant veritabanı ile")
+st.title("Ubuntu RAG Asistanı (Apache Dökümanları) 🤖")
+st.caption("K3s + GPU üzerinde çalışan Qwen modeli ve Qdrant veritabanı ile")
 
-# Backend API adresini Kubernetes servis adından al
+# Backend API adresini environment variable'dan al
 BACKEND_URL = os.environ.get(
     "BACKEND_URL", 
-    # ArgoCD'nin oluşturduğu servisin tam DNS adı
     "http://rag-backend-service.rag-system.svc.cluster.local:8000"
 )
 

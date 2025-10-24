@@ -19,11 +19,26 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
+        resources:
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+          requests:
+            memory: "1Gi"
+            cpu: "0.5"
         env:
         - name: QDRANT_URL
           value: "http://qdrant-service.rag-system.svc.cluster.local:6333"
         - name: OLLAMA_URL
           value: "http://ollama-service.rag-system.svc.cluster.local:11434"
+        - name: MODEL_NAME
+          value: "qwen"
+        - name: COLLECTION_NAME
+          value: "apache_docs"
+        - name: DATA_PATH
+          value: "/data/"
+        - name: DEBUG_MODE
+          value: "false"
 ---
 apiVersion: v1
 kind: Service
