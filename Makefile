@@ -20,7 +20,7 @@ GITHUB_USER        ?= $(shell git config user.name)
 GITHUB_REPO        ?= $(shell basename `git rev-parse --show-toplevel`)
 
 # === Makefile Kuralları ===
-.PHONY: all up down destroy clean cluster install-gpu-plugin check-gpu install-argocd create-repo-secret deploy-app ui-argo ui-app ingest status setup-ubuntu install-k3s configure-k3s help
+.PHONY: all up down destroy clean cluster install-gpu-plugin check-gpu install-argocd create-repo-secret deploy-app ui-argo ui-app ingest force-sync status setup-ubuntu install-k3s configure-k3s help
 
 # Varsayılan komut (sadece 'make' yazarsanız)
 all: help
@@ -190,6 +190,12 @@ ingest:
 	echo "Port-forward kapatılıyor..." ; \
 	kill $$KUBE_PID
 
+# ArgoCD uygulamasını force sync yap
+force-sync:
+	@echo "🔄 ArgoCD uygulaması force sync ediliyor..."
+	@kubectl patch application ubuntu-rag-sistemi -n $(ARGOCD_NS) --type merge -p '{"operation":{"sync":{"syncOptions":["Force=true"]}}}'
+	@echo "✅ Force sync tetiklendi. ArgoCD arayüzünde senkronizasyonu izleyin."
+
 # Tüm podların durumunu göster
 status:
 	@echo "--- ArgoCD Podları ($(ARGOCD_NS)) ---"
@@ -216,6 +222,7 @@ help:
 	@echo ""
 	@echo "📊 Veri İşlemleri:"
 	@echo "  make ingest                : PDF'leri Qdrant'a yükler"
+	@echo "  make force-sync            : ArgoCD uygulamasını force sync yapar"
 	@echo ""
 	@echo "🔧 Kurulum Adımları:"
 	@echo "  make setup-ubuntu          : Ubuntu sistem kurulumu (ilk kez)"

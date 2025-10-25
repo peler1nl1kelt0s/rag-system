@@ -45,7 +45,9 @@ jobs:
         with:
           context: ./apps/backend
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ github.event.repository.name }}-backend:latest
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ github.event.repository.name }}-backend:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ github.event.repository.name }}-backend:${{ github.sha }}
           no-cache: true
 
   # Frontend sadece frontend değiştiğinde build edilecek
@@ -81,5 +83,7 @@ jobs:
         with:
           context: ./apps/frontend
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ github.event.repository.name }}-frontend:latest
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ github.event.repository.name }}-frontend:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ github.event.repository.name }}-frontend:${{ github.sha }}
           no-cache: true
