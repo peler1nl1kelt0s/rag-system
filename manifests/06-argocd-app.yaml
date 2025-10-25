@@ -10,6 +10,8 @@ spec:
     repoURL: https://github.com/peler1nl1kelt0s/rag-system.git
     targetRevision: HEAD
     path: manifests
+    # Private repo için authentication gerekli
+    # Public repo için authentication gerekmez
   
   destination:
     server: https://kubernetes.default.svc

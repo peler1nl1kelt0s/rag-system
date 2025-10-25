@@ -20,13 +20,13 @@ GITHUB_USER        ?= $(shell git config user.name)
 GITHUB_REPO        ?= $(shell basename `git rev-parse --show-toplevel`)
 
 # === Makefile Kuralları ===
-.PHONY: all up down destroy clean cluster install-gpu-plugin check-gpu install-argocd deploy-app ui-argo ui-app ingest status build-images setup-ubuntu install-k3s configure-k3s help
+.PHONY: all up down destroy clean cluster install-gpu-plugin check-gpu install-argocd create-repo-secret deploy-app ui-argo ui-app ingest status setup-ubuntu install-k3s configure-k3s help
 
 # Varsayılan komut (sadece 'make' yazarsanız)
 all: help
 
 # Ana 'up' komutu. Her şeyi sırayla kurar.
-up: build-images cluster install-gpu-plugin check-gpu install-argocd deploy-app
+up: cluster install-gpu-plugin check-gpu install-argocd deploy-app
 	@echo "\n🎉 Kurulum Tamamlandı! 🎉"
 	@echo "Şimdi ArgoCD arayüzünü kontrol edin:"
 	@echo "  make ui-argo"
@@ -56,11 +56,8 @@ clean:
 	@kubectl delete -f k3s-gpu/device-plugin-daemonset.yaml || true
 
 # --- Image Build ---
-
-# Backend ve Frontend image'larını build et
-build-images:
-	@echo "🔨 Backend ve Frontend image'ları build ediliyor..."
-	@./scripts/build-images.sh
+# Not: Image'lar GitHub Actions ile otomatik build edilir
+# Manuel build için: scripts/build-images.sh
 
 
 # --- Kurulum Adımları ---
@@ -131,11 +128,28 @@ install-argocd:
 	@echo "⏳ ArgoCD sunucusunun başlaması bekleniyor..."
 	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n $(ARGOCD_NS) --timeout=300s
 
-# Adım 5: Ana RAG uygulamasını ArgoCD'ye deploy et
-deploy-app:
+# Adım 5: GitHub repository secret'ını oluştur
+create-repo-secret:
+	@echo "🔐 GitHub repository secret oluşturuluyor..."
+	@if [ -z "$(GITHUB_TOKEN)" ] || [ "$(GITHUB_TOKEN)" = "your_github_token_here" ]; then \
+		echo "❌ GITHUB_TOKEN .env dosyasında tanımlanmamış!"; \
+		exit 1; \
+	fi
+	@kubectl create secret generic github-repo-secret \
+		--from-literal=type=git \
+		--from-literal=url=https://github.com/$(GITHUB_USER)/$(GITHUB_REPO).git \
+		--from-literal=username=$(GITHUB_USER) \
+		--from-literal=password=$(GITHUB_TOKEN) \
+		-n argocd \
+		--dry-run=client -o yaml | \
+		kubectl label --local -f - argocd.argoproj.io/secret-type=repository -o yaml | \
+		kubectl apply -f -
+	@echo "✅ GitHub repository secret oluşturuldu!"
+
+# Adım 6: Ana RAG uygulamasını ArgoCD'ye deploy et
+deploy-app: create-repo-secret
 	@echo "🚀 RAG Uygulaması ArgoCD'ye bildiriliyor..."
 	@echo "Manifestlerinizin şu repoyu hedeflediğinden emin olun: $(GITHUB_USER)/$(GITHUB_REPO)"
-	# ÖNEMLİ: '06-argocd-app.yaml' dosyanızın içindeki repoURL'in doğru olduğundan emin olun!
 	@kubectl apply -f manifests/06-argocd-app.yaml
 	@echo "✅ ArgoCD uygulaması oluşturuldu. 'make ui-argo' ile senkronizasyonu izleyin."
 
@@ -200,9 +214,11 @@ help:
 	@echo "  make configure-k3s         : K3s konfigürasyonunu yapar"
 	@echo "  make install-gpu-plugin    : NVIDIA GPU plugin kurar"
 	@echo "  make check-gpu             : GPU erişilebilirliğini kontrol eder"
+	@echo "  make create-repo-secret    : GitHub repository secret oluşturur"
 	@echo ""
-	@echo "🏗️  Build Komutları:"
-	@echo "  make build-images          : Backend ve Frontend image'larını build eder"
+	@echo "🏗️  Build Bilgisi:"
+	@echo "  Image'lar GitHub Actions ile otomatik build edilir"
+	@echo "  Manuel build için: ./scripts/build-images.sh"
 	@echo ""
 	@echo "💡 İpucu: .env dosyasını düzenleyerek konfigürasyonu özelleştirin"
 	@echo "   GPU desteği için NVIDIA Container Toolkit kurulu olmalı"

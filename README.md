@@ -34,10 +34,7 @@ cp .env.example .env
 # 3. Ubuntu sistem kurulumu (ilk kez)
 make setup-ubuntu
 
-# 4. Docker image'larını build edin
-make build-images
-
-# 5. Tüm sistemi kurun
+# 4. Tüm sistemi kurun (image'lar GitHub Actions ile otomatik build edilir)
 make up
 ```
 
@@ -77,7 +74,8 @@ make install-gpu-plugin   # NVIDIA GPU plugin
 make check-gpu            # GPU kontrolü
 
 # Build
-make build-images         # Docker image'larını build eder
+# Image'lar GitHub Actions ile otomatik build edilir
+# Manuel build için: ./scripts/build-images.sh
 ```
 
 ## ⚙️ Konfigürasyon

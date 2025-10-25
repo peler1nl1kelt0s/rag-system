@@ -45,6 +45,34 @@ except Exception as e:
     logger.error(f"Başlangıçta hata oluştu: {e}")
     qdrant_client = None # Hata durumunda None ata
 
+# Startup'ta otomatik ingest (opsiyonel)
+@app.on_event("startup")
+async def startup_event():
+    """Uygulama başladığında otomatik PDF yükleme"""
+    try:
+        logger.info("Startup: Otomatik PDF yükleme kontrol ediliyor...")
+        # PDF dosyası var mı kontrol et
+        import glob
+        pdf_files = glob.glob(f"{DATA_PATH}*.pdf")
+        if pdf_files:
+            logger.info(f"PDF dosyaları bulundu: {pdf_files}")
+            # Qdrant'ta koleksiyon var mı kontrol et
+            from qdrant_client import QdrantClient
+            client = QdrantClient(url=QDRANT_URL)
+            try:
+                collections = client.get_collections()
+                if COLLECTION_NAME not in [c.name for c in collections.collections]:
+                    logger.info("Koleksiyon bulunamadı, otomatik ingest başlatılıyor...")
+                    await ingest_data()
+                else:
+                    logger.info("Koleksiyon zaten mevcut, otomatik ingest atlanıyor.")
+            except Exception as e:
+                logger.warning(f"Qdrant bağlantı hatası: {e}")
+        else:
+            logger.info("PDF dosyası bulunamadı, otomatik ingest atlanıyor.")
+    except Exception as e:
+        logger.error(f"Startup ingest hatası: {e}")
+
 class ChatRequest(BaseModel):
     query: str
 
