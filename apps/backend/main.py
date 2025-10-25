@@ -81,32 +81,45 @@ async def chat(request: ChatRequest):
     """
     Kullanıcıdan bir sorgu alır, Qdrant'ta arar ve LLM'e cevaplatır.
     """
-    if not qdrant_client:
-        return {"error": "Qdrant veritabanı hazır değil. Lütfen önce /ingest yapın."}
-
-    logger.info(f"Sorgu alındı: {request.query}")
-    
-    # 1. Qdrant'ta benzerlik ara
-    similar_docs = qdrant_client.similarity_search(request.query, k=3)
-    context = "\n".join([doc.page_content for doc in similar_docs])
-    
-    # 2. Prompt'u oluştur
-    prompt_template = f"""
-    Sana verilen bağlamı (context) kullanarak soruya cevap ver. Eğer cevap bağlamda yoksa, 'Bilmiyorum' de.
-    Bağlam: {context}
-    Soru: {request.query}
-    Cevap:
-    """
-    
-    # 3. LLM'i (Ollama) çağır
-    logger.info("LLM'e cevap ürettiriliyor...")
     try:
-        response = llm.invoke(prompt_template)
-        logger.info("Cevap alındı.")
-        return {"response": response}
+        if not qdrant_client:
+            return {"error": "Qdrant veritabanı hazır değil. Lütfen önce /ingest yapın."}
+
+        logger.info(f"Sorgu alındı: {request.query}")
+        
+        # 1. Qdrant'ta benzerlik ara
+        try:
+            similar_docs = qdrant_client.similarity_search(request.query, k=3)
+            if not similar_docs:
+                return {"error": "İlgili döküman bulunamadı. Lütfen farklı bir soru deneyin."}
+            
+            context = "\n".join([doc.page_content for doc in similar_docs])
+            logger.info(f"{len(similar_docs)} döküman bulundu")
+        except Exception as e:
+            logger.error(f"Qdrant arama hatası: {e}")
+            return {"error": f"Veritabanında arama yaparken hata oluştu: {e}"}
+        
+        # 2. Prompt'u oluştur
+        prompt_template = f"""
+        Sana verilen bağlamı (context) kullanarak soruya cevap ver. Eğer cevap bağlamda yoksa, 'Bilmiyorum' de.
+        Bağlam: {context}
+        Soru: {request.query}
+        Cevap:
+        """
+        
+        # 3. LLM'i (Ollama) çağır
+        logger.info("LLM'e cevap ürettiriliyor...")
+        try:
+            response = llm.invoke(prompt_template)
+            logger.info("Cevap alındı.")
+            return {"response": response}
+        except Exception as e:
+            logger.error(f"LLM hatası: {e}")
+            return {"error": f"LLM'e bağlanırken hata oluştu: {e}"}
+            
     except Exception as e:
-        logger.error(f"LLM hatası: {e}")
-        return {"error": f"LLM'e bağlanırken hata oluştu: {e}"}
+        logger.error(f"Genel chat hatası: {e}")
+        return {"error": f"Beklenmeyen hata oluştu: {e}"}
 
 @app.post("/ingest")
 async def ingest_data():

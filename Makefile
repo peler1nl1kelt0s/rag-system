@@ -33,19 +33,14 @@ up: cluster install-gpu-plugin check-gpu install-argocd deploy-app
 	@echo "Veya direkt uygulama arayüzüne gidin (Senkronizasyon bittikten sonra):"
 	@echo "  make ui-app"
 
-# K3s ve tüm uygulamaları yok et
+# Cluster içindeki tüm uygulamaları yok et (K3s kalır)
 destroy:
-	@echo "🔥 K3s ve tüm uygulamalar siliniyor..."
+	@echo "🔥 Cluster içindeki tüm uygulamalar siliniyor..."
 	@kubectl delete -f manifests/06-argocd-app.yaml || true
 	@kubectl delete namespace $(APP_NS) || true
 	@kubectl delete namespace $(ARGOCD_NS) || true
 	@kubectl delete -f k3s-gpu/device-plugin-daemonset.yaml || true
-	@echo "🛑 K3s servisi durduruluyor..."
-	@sudo systemctl stop k3s || true
-	@sudo systemctl disable k3s || true
-	@echo "🗑️  K3s kaldırılıyor..."
-	@sudo /usr/local/bin/k3s-uninstall.sh || true
-	@echo "✅ K3s tamamen kaldırıldı!"
+	@echo "✅ Cluster temizlendi! K3s çalışmaya devam ediyor."
 
 # Sadece Kubernetes uygulamalarını sil (K3s kalsın)
 clean:
@@ -55,9 +50,6 @@ clean:
 	@kubectl delete namespace $(ARGOCD_NS) || true
 	@kubectl delete -f k3s-gpu/device-plugin-daemonset.yaml || true
 
-# --- Image Build ---
-# Not: Image'lar GitHub Actions ile otomatik build edilir
-# Manuel build için: scripts/build-images.sh
 
 
 # --- Kurulum Adımları ---
@@ -72,6 +64,14 @@ install-k3s:
 	@echo "🚀 K3s kurulumu kontrol ediliyor..."
 	@if command -v k3s > /dev/null 2>&1; then \
 		echo "✅ K3s zaten kurulu"; \
+		echo "🔍 K3s servis durumu kontrol ediliyor..."; \
+		if sudo systemctl is-active --quiet k3s; then \
+			echo "✅ K3s servisi çalışıyor"; \
+		else \
+			echo "⚠️  K3s servisi durmuş, başlatılıyor..."; \
+			sudo systemctl start k3s; \
+			sleep 5; \
+		fi; \
 	else \
 		echo "📦 K3s kuruluyor..."; \
 		curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable=traefik" sh -; \
@@ -86,12 +86,21 @@ install-k3s:
 configure-k3s:
 	@echo "🔧 K3s konfigürasyonu yapılıyor..."
 	@if [ ! -f ~/.kube/config ]; then \
-		sudo mkdir -p /etc/rancher/k3s; \
+		echo "📋 kubectl config dosyası oluşturuluyor..."; \
+		mkdir -p ~/.kube; \
 		sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config; \
 		sudo chown $(shell whoami):$(shell whoami) ~/.kube/config; \
 		echo "✅ K3s konfigürasyonu tamamlandı!"; \
 	else \
 		echo "✅ kubectl konfigürasyonu zaten mevcut"; \
+		echo "🔍 kubectl bağlantısı test ediliyor..."; \
+		if kubectl get nodes > /dev/null 2>&1; then \
+			echo "✅ kubectl K3s'e bağlanabiliyor"; \
+		else \
+			echo "⚠️  kubectl bağlantı sorunu, config yenileniyor..."; \
+			sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config; \
+			sudo chown $(shell whoami):$(shell whoami) ~/.kube/config; \
+		fi; \
 	fi
 
 # Adım 3: GPU plugin kurulumu
@@ -108,7 +117,7 @@ install-gpu-plugin:
 	@sudo nvidia-ctk runtime configure --runtime=containerd
 	@sudo systemctl restart containerd
 	@echo "📋 NVIDIA device plugin DaemonSet kuruluyor..."
-	@kubectl apply -f k3s-gpu/device-plugin-daemonset.yaml
+	@kubectl apply -f k3s-gpu/device-plugin-daemonset.yaml --validate=false
 	@echo "⏳ Device plugin DaemonSet'inin hazır olması bekleniyor..."
 	@sleep 10
 	@kubectl wait --for=condition=ready pod -l name=nvidia-device-plugin-ds -n kube-system --timeout=120s || echo "⚠️  Device plugin beklemede, devam ediliyor..."
@@ -197,7 +206,7 @@ help:
 	@echo ""
 	@echo "🚀 Temel Komutlar:"
 	@echo "  make up                    : Tüm sistemi kurar (K3s, GPU, ArgoCD, App)"
-	@echo "  make destroy               : K3s'i tamamen siler"
+	@echo "  make destroy               : Cluster içindeki uygulamaları siler (K3s kalır)"
 	@echo "  make clean                 : Sadece uygulamaları siler (K3s kalır)"
 	@echo "  make status                : Tüm pod'ların durumunu gösterir"
 	@echo ""
