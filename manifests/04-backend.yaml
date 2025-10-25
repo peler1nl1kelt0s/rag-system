@@ -13,6 +13,8 @@ spec:
       labels:
         app: rag-backend
     spec:
+      imagePullSecrets:
+      - name: ghcr-secret
       containers:
       - name: backend
         image: ghcr.io/peler1nl1kelt0s/rag-system-backend:latest

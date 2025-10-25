@@ -1,40 +1,39 @@
-# === Environment Variables ===
-# Load environment variables from .env file
+# Ubuntu RAG Sistemi Makefile (K3s)
+# ==================================
+
+# .env dosyasını yükle
 ifneq (,$(wildcard .env))
     include .env
     export
 endif
 
-# === Default Variables ===
-# Buradaki değişkenleri projenize göre özelleştirebilirsiniz.
-CLUSTER_NAME       ?= rag-cluster
-ARGOCD_NS          ?= argocd
-APP_NS             ?= rag-system
-NVIDIA_NS          ?= nvidia-device-plugin
+# Namespace'ler
+APP_NS        ?= rag-system
+ARGOCD_NS     ?= argocd
+NVIDIA_NS     ?= kube-system
 
-# GPU Configuration
-USE_CUSTOM_IMAGE   ?= true
+# Port'lar
+ARGOCD_PORT   ?= 8080
+FRONTEND_PORT ?= 8501
 
 # Git bilgilerini otomatik al
-GITHUB_USER        ?= $(shell git config user.name)
-GITHUB_REPO        ?= $(shell basename `git rev-parse --show-toplevel`)
+GITHUB_USER   ?= $(shell git config user.name)
+GITHUB_REPO   ?= $(shell basename `git rev-parse --show-toplevel`)
 
 # === Makefile Kuralları ===
-.PHONY: all up down destroy clean cluster install-gpu-plugin check-gpu install-argocd create-repo-secret deploy-app ui-argo ui-app ingest force-sync status setup-ubuntu install-k3s configure-k3s help
+.PHONY: all up down ui-argo ui-app status help
 
 # Varsayılan komut (sadece 'make' yazarsanız)
 all: help
 
 # Ana 'up' komutu. Her şeyi sırayla kurar.
-up: cluster install-gpu-plugin check-gpu install-argocd deploy-app
+up: install-k3s configure-k3s install-gpu-plugin install-argocd create-secrets deploy-app
 	@echo "\n🎉 Kurulum Tamamlandı! 🎉"
-	@echo "Şimdi ArgoCD arayüzünü kontrol edin:"
-	@echo "  make ui-argo"
-	@echo "Veya direkt uygulama arayüzüne gidin (Senkronizasyon bittikten sonra):"
-	@echo "  make ui-app"
+	@echo "ArgoCD arayüzü: make ui-argo"
+	@echo "Streamlit arayüzü: make ui-app"
 
 # Cluster içindeki tüm uygulamaları yok et (K3s kalır)
-destroy:
+down:
 	@echo "🔥 Cluster içindeki tüm uygulamalar siliniyor..."
 	@kubectl delete -f manifests/06-argocd-app.yaml || true
 	@kubectl delete namespace $(APP_NS) || true
@@ -42,32 +41,14 @@ destroy:
 	@kubectl delete -f k3s-gpu/device-plugin-daemonset.yaml || true
 	@echo "✅ Cluster temizlendi! K3s çalışmaya devam ediyor."
 
-# Sadece Kubernetes uygulamalarını sil (K3s kalsın)
-clean:
-	@echo "🧹 Kubernetes uygulamaları siliniyor..."
-	@kubectl delete -f manifests/06-argocd-app.yaml || true
-	@kubectl delete namespace $(APP_NS) || true
-	@kubectl delete namespace $(ARGOCD_NS) || true
-	@kubectl delete -f k3s-gpu/device-plugin-daemonset.yaml || true
-
-
-
 # --- Kurulum Adımları ---
 
-# Ubuntu sistem kurulumu
-setup-ubuntu:
-	@echo "🚀 Ubuntu sistem kurulumu başlıyor..."
-	@./scripts/ubuntu-setup.sh
-
-# Adım 1: K3s kurulumu (Ubuntu için)
+# K3s kurulumu
 install-k3s:
 	@echo "🚀 K3s kurulumu kontrol ediliyor..."
 	@if command -v k3s > /dev/null 2>&1; then \
 		echo "✅ K3s zaten kurulu"; \
-		echo "🔍 K3s servis durumu kontrol ediliyor..."; \
-		if sudo systemctl is-active --quiet k3s; then \
-			echo "✅ K3s servisi çalışıyor"; \
-		else \
+		if ! sudo systemctl is-active --quiet k3s; then \
 			echo "⚠️  K3s servisi durmuş, başlatılıyor..."; \
 			sudo systemctl start k3s; \
 			sleep 5; \
@@ -75,75 +56,44 @@ install-k3s:
 	else \
 		echo "📦 K3s kuruluyor..."; \
 		curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable=traefik" sh -; \
-		echo "⏳ K3s servisinin başlaması bekleniyor..."; \
 		sleep 10; \
 		sudo systemctl enable k3s; \
 		sudo systemctl start k3s; \
-		echo "✅ K3s başarıyla kuruldu!"; \
 	fi
 
-# Adım 2: K3s konfigürasyonu
+# K3s konfigürasyonu
 configure-k3s:
 	@echo "🔧 K3s konfigürasyonu yapılıyor..."
 	@if [ ! -f ~/.kube/config ]; then \
-		echo "📋 kubectl config dosyası oluşturuluyor..."; \
 		mkdir -p ~/.kube; \
 		sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config; \
 		sudo chown $(shell whoami):$(shell whoami) ~/.kube/config; \
-		echo "✅ K3s konfigürasyonu tamamlandı!"; \
-	else \
-		echo "✅ kubectl konfigürasyonu zaten mevcut"; \
-		echo "🔍 kubectl bağlantısı test ediliyor..."; \
-		if kubectl get nodes > /dev/null 2>&1; then \
-			echo "✅ kubectl K3s'e bağlanabiliyor"; \
-		else \
-			echo "⚠️  kubectl bağlantı sorunu, config yenileniyor..."; \
-			sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config; \
-			sudo chown $(shell whoami):$(shell whoami) ~/.kube/config; \
-		fi; \
 	fi
 
-# Adım 3: GPU plugin kurulumu
-cluster: install-k3s configure-k3s
-	@echo "🎯 K3s cluster hazır!"
-
-# Adım 4: GPU yapılandırması
+# GPU plugin kurulumu
 install-gpu-plugin:
 	@echo "🔌 NVIDIA GPU plugin kuruluyor..."
-	@echo "📦 NVIDIA Container Toolkit kurulumu kontrol ediliyor..."
-	@which nvidia-ctk > /dev/null 2>&1 || (echo "❌ NVIDIA Container Toolkit bulunamadı. Lütfen önce kurun." && exit 1)
-	@echo "✅ NVIDIA Container Toolkit mevcut"
-	@echo "🔧 containerd runtime konfigürasyonu yapılıyor..."
+	@which nvidia-ctk > /dev/null 2>&1 || (echo "❌ NVIDIA Container Toolkit bulunamadı." && exit 1)
 	@sudo nvidia-ctk runtime configure --runtime=containerd
 	@sudo systemctl restart containerd
-	@echo "📋 NVIDIA device plugin DaemonSet kuruluyor..."
 	@kubectl apply -f k3s-gpu/device-plugin-daemonset.yaml --validate=false
-	@echo "⏳ Device plugin DaemonSet'inin hazır olması bekleniyor..."
 	@sleep 10
-	@kubectl wait --for=condition=ready pod -l name=nvidia-device-plugin-ds -n kube-system --timeout=120s || echo "⚠️  Device plugin beklemede, devam ediliyor..."
-	@echo "✅ GPU yapılandırması tamamlandı"
 
-# Adım 3: GPU'nun host'ta erişilebilir olduğunu doğrula
-check-gpu:
-	@echo "🔎 Host sisteminde GPU'nun varlığı kontrol ediliyor..."
-	@nvidia-smi > /dev/null 2>&1 && echo "✅ nvidia-smi çalışıyor - GPU erişilebilir!" || \
-	  (echo "⚠️  nvidia-smi çalışmıyor. GPU olmadan devam ediliyor (CPU modunda çalışacak)." && true)
-
-# Adım 4: ArgoCD'yi kur
+# ArgoCD kurulumu
 install-argocd:
 	@echo "🔄 ArgoCD kuruluyor..."
 	@kubectl create namespace $(ARGOCD_NS) || true
 	@kubectl apply -n $(ARGOCD_NS) -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-	@echo "⏳ ArgoCD sunucusunun başlaması bekleniyor..."
 	@kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n $(ARGOCD_NS) --timeout=300s
 
-# Adım 5: GitHub repository secret'ını oluştur
-create-repo-secret:
-	@echo "🔐 GitHub repository secret oluşturuluyor..."
+# Tüm secret'ları oluştur
+create-secrets:
+	@echo "🔐 Secret'lar oluşturuluyor..."
 	@if [ -z "$(GITHUB_TOKEN)" ] || [ "$(GITHUB_TOKEN)" = "your_github_token_here" ]; then \
 		echo "❌ GITHUB_TOKEN .env dosyasında tanımlanmamış!"; \
 		exit 1; \
 	fi
+	@kubectl create namespace $(APP_NS) || true
 	@kubectl create secret generic github-repo-secret \
 		--from-literal=type=git \
 		--from-literal=url=https://github.com/$(GITHUB_USER)/$(GITHUB_REPO).git \
@@ -153,88 +103,53 @@ create-repo-secret:
 		--dry-run=client -o yaml | \
 		kubectl label --local -f - argocd.argoproj.io/secret-type=repository -o yaml | \
 		kubectl apply -f -
-	@echo "✅ GitHub repository secret oluşturuldu!"
+	@kubectl create secret docker-registry ghcr-secret \
+		--docker-server=ghcr.io \
+		--docker-username=$(GITHUB_USER) \
+		--docker-password=$(GITHUB_TOKEN) \
+		--docker-email=$(GITHUB_USER)@users.noreply.github.com \
+		-n $(APP_NS) \
+		--dry-run=client -o yaml | kubectl apply -f -
 
-# Adım 6: Ana RAG uygulamasını ArgoCD'ye deploy et
-deploy-app: create-repo-secret
-	@echo "🚀 RAG Uygulaması ArgoCD'ye bildiriliyor..."
-	@echo "Manifestlerinizin şu repoyu hedeflediğinden emin olun: $(GITHUB_USER)/$(GITHUB_REPO)"
+# RAG uygulamasını deploy et
+deploy-app:
+	@echo "🚀 RAG Uygulaması deploy ediliyor..."
 	@kubectl apply -f manifests/06-argocd-app.yaml
-	@echo "✅ ArgoCD uygulaması oluşturuldu. 'make ui-argo' ile senkronizasyonu izleyin."
 
 # --- Yardımcı Komutlar ---
 
-# ArgoCD arayüzünü port-forward et ve şifreyi göster
+# ArgoCD arayüzünü port-forward et
 ui-argo:
-	@echo "🔑 ArgoCD admin şifresi:"
-	@kubectl -n $(ARGOCD_NS) get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d ; echo
-	@echo "\n\n🚀 ArgoCD Arayüzü: https://localhost:$(ARGOCD_PORT) (Ctrl+C ile durdurun)"
-	@kubectl port-forward svc/argocd-server -n $(ARGOCD_NS) --address 0.0.0.0 $(ARGOCD_PORT):443
+	@echo "🌐 ArgoCD arayüzü: http://localhost:$(ARGOCD_PORT)"
+	@echo "Şifre: $$(kubectl -n $(ARGOCD_NS) get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)"
+	@kubectl port-forward svc/argocd-server -n $(ARGOCD_NS) $(ARGOCD_PORT):443
 
-# Streamlit (Frontend) arayüzünü port-forward et
+# Streamlit arayüzünü port-forward et
 ui-app:
-	@echo "🚀 Streamlit Arayüzü: http://localhost:$(FRONTEND_PORT) (Ctrl+C ile durdurun)"
-	@kubectl port-forward svc/rag-frontend-service -n $(APP_NS) --address 0.0.0.0 $(FRONTEND_PORT):8501
+	@echo "🌐 Streamlit arayüzü: http://localhost:$(FRONTEND_PORT)"
+	@kubectl port-forward svc/rag-frontend -n $(APP_NS) $(FRONTEND_PORT):8501
 
-# Veri yükleme (ingest) endpoint'ini bir kez tetikle
-ingest:
-	@echo "⏳ Backend port-forward başlatılıyor..."
-	@kubectl port-forward svc/rag-backend-service -n $(APP_NS) --address 0.0.0.0 $(BACKEND_PORT):8000 & \
-	# port-forward işleminin PID'sini (proses ID) al
-	KUBE_PID=$$! ; \
-	echo "Port-forward PID: $$KUBE_PID" ; \
-	echo "Veri yükleme (Ingest) tetikleniyor... (Bu işlem uzun sürebilir)" ; \
-	sleep 3 ; \
-	curl -X POST http://localhost:$(BACKEND_PORT)/ingest ; \
-	echo "\n✅ Ingest isteği gönderildi." ; \
-	echo "Port-forward kapatılıyor..." ; \
-	kill $$KUBE_PID
-
-# ArgoCD uygulamasını force sync yap
-force-sync:
-	@echo "🔄 ArgoCD uygulaması force sync ediliyor..."
-	@kubectl patch application ubuntu-rag-sistemi -n $(ARGOCD_NS) --type merge -p '{"operation":{"sync":{"syncOptions":["Force=true"]}}}'
-	@echo "✅ Force sync tetiklendi. ArgoCD arayüzünde senkronizasyonu izleyin."
-
-# Tüm podların durumunu göster
+# Cluster durumunu kontrol et
 status:
-	@echo "--- ArgoCD Podları ($(ARGOCD_NS)) ---"
-	@kubectl get pods -n $(ARGOCD_NS)
-	@echo "\n--- NVIDIA Plugin Podları ($(NVIDIA_NS)) ---"
-	@kubectl get pods -n $(NVIDIA_NS)
-	@echo "\n--- RAG Uygulama Podları ($(APP_NS)) ---"
-	@kubectl get pods -n $(APP_NS)
+	@echo "📊 Cluster Durumu:"
+	@kubectl get nodes
+	@echo ""
+	@kubectl get pods -n $(APP_NS) 2>/dev/null || echo "rag-system namespace'i bulunamadı"
+	@kubectl get pods -n $(ARGOCD_NS) 2>/dev/null || echo "argocd namespace'i bulunamadı"
 
 # Yardım menüsü
 help:
 	@echo "Ubuntu RAG Sistemi Makefile (K3s)"
-	@echo "====================================="
+	@echo "=================================="
 	@echo ""
-	@echo "🚀 Temel Komutlar:"
-	@echo "  make up                    : Tüm sistemi kurar (K3s, GPU, ArgoCD, App)"
-	@echo "  make destroy               : Cluster içindeki uygulamaları siler (K3s kalır)"
-	@echo "  make clean                 : Sadece uygulamaları siler (K3s kalır)"
-	@echo "  make status                : Tüm pod'ların durumunu gösterir"
+	@echo "🚀 Ana Komutlar:"
+	@echo "  make up              : Tüm sistemi kurar (K3s + GPU + ArgoCD + RAG)"
+	@echo "  make down            : Tüm uygulamaları siler (K3s kalır)"
+	@echo "  make ui-argo         : ArgoCD arayüzünü açar"
+	@echo "  make ui-app          : Streamlit arayüzünü açar"
+	@echo "  make status          : Pod durumlarını gösterir"
 	@echo ""
-	@echo "🎮 Arayüzler:"
-	@echo "  make ui-argo               : ArgoCD arayüzü (https://localhost:$(ARGOCD_PORT))"
-	@echo "  make ui-app                : Streamlit frontend (http://localhost:$(FRONTEND_PORT))"
-	@echo ""
-	@echo "📊 Veri İşlemleri:"
-	@echo "  make ingest                : PDF'leri Qdrant'a yükler"
-	@echo "  make force-sync            : ArgoCD uygulamasını force sync yapar"
-	@echo ""
-	@echo "🔧 Kurulum Adımları:"
-	@echo "  make setup-ubuntu          : Ubuntu sistem kurulumu (ilk kez)"
-	@echo "  make install-k3s           : K3s'i Ubuntu'ya kurar"
-	@echo "  make configure-k3s         : K3s konfigürasyonunu yapar"
-	@echo "  make install-gpu-plugin    : NVIDIA GPU plugin kurar"
-	@echo "  make check-gpu             : GPU erişilebilirliğini kontrol eder"
-	@echo "  make create-repo-secret    : GitHub repository secret oluşturur"
-	@echo ""
-	@echo "🏗️  Build Bilgisi:"
-	@echo "  Image'lar GitHub Actions ile otomatik build edilir"
-	@echo "  Manuel build için: ./scripts/build-images.sh"
-	@echo ""
-	@echo "💡 İpucu: .env dosyasını düzenleyerek konfigürasyonu özelleştirin"
-	@echo "   GPU desteği için NVIDIA Container Toolkit kurulu olmalı"
+	@echo "📋 Notlar:"
+	@echo "  - PDF'ler apps/backend/apache_pdfs/ klasörüne koyulur"
+	@echo "  - Sistem otomatik olarak PDF'leri vector database'ye yükler"
+	@echo "  - ArgoCD şifresi: make ui-argo komutunda gösterilir"
