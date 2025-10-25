@@ -32,14 +32,18 @@ up: install-k3s configure-k3s install-gpu-plugin install-argocd create-secrets d
 	@echo "ArgoCD arayüzü: make ui-argo"
 	@echo "Streamlit arayüzü: make ui-app"
 
-# Cluster içindeki tüm uygulamaları yok et (K3s kalır)
+# Tüm sistemi yok et (K3s dahil)
 down:
-	@echo "🔥 Cluster içindeki tüm uygulamalar siliniyor..."
+	@echo "🔥 Tüm sistem siliniyor (K3s dahil)..."
 	@kubectl delete -f manifests/06-argocd-app.yaml || true
 	@kubectl delete namespace $(APP_NS) || true
 	@kubectl delete namespace $(ARGOCD_NS) || true
 	@kubectl delete -f k3s-gpu/device-plugin-daemonset.yaml || true
-	@echo "✅ Cluster temizlendi! K3s çalışmaya devam ediyor."
+	@echo "🛑 K3s servisi durduruluyor..."
+	@sudo systemctl stop k3s || true
+	@echo "🗑️  K3s kaldırılıyor..."
+	@sudo /usr/local/bin/k3s-uninstall.sh || true
+	@echo "✅ Tüm sistem tamamen silindi!"
 
 # --- Kurulum Adımları ---
 
@@ -144,7 +148,7 @@ help:
 	@echo ""
 	@echo "🚀 Ana Komutlar:"
 	@echo "  make up              : Tüm sistemi kurar (K3s + GPU + ArgoCD + RAG)"
-	@echo "  make down            : Tüm uygulamaları siler (K3s kalır)"
+	@echo "  make down            : Tüm sistemi siler (K3s dahil)"
 	@echo "  make ui-argo         : ArgoCD arayüzünü açar"
 	@echo "  make ui-app          : Streamlit arayüzünü açar"
 	@echo "  make status          : Pod durumlarını gösterir"
