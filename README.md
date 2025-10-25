@@ -1,147 +1,528 @@
-# Ubuntu RAG System
+# 🚀 RAG AI Assistant - GPU-Enabled K3s System
 
-Bu proje, Ubuntu makine üzerinde K3s Kubernetes cluster'ı kullanarak çalışan bir RAG (Retrieval-Augmented Generation) sistemidir. Apache dökümanları üzerinde GPU destekli AI asistanı sağlar.
+GPU-enabled, Kubernetes-based RAG (Retrieval-Augmented Generation) system running on Apache documentation.
 
-## 🏗️ Sistem Mimarisi
+## 📋 Table of Contents
 
-- **Backend**: FastAPI ile PDF işleme ve chat API
-- **Frontend**: Streamlit ile kullanıcı arayüzü  
-- **Qdrant**: Vektör veritabanı
-- **Ollama**: GPU'da çalışan LLM (Qwen modeli)
-- **ArgoCD**: GitOps ile deployment yönetimi
-- **K3s**: Lightweight Kubernetes cluster
+- [System Architecture](#-system-architecture)
+- [Features](#-features)
+- [Requirements](#-requirements)
+- [Quick Start](#-quick-start)
+- [Usage](#-usage)
+- [Commands](#-commands)
+- [Configuration](#️-configuration)
+- [Troubleshooting](#-troubleshooting)
+- [Project Structure](#-project-structure)
 
-## 🚀 Hızlı Başlangıç
+---
 
-### 1. Sistem Gereksinimleri
+## 🏗️ System Architecture
 
-- Ubuntu 20.04+ 
-- NVIDIA GPU (CUDA destekli)
-- En az 8GB RAM
-- En az 20GB disk alanı
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    K3s Kubernetes Cluster                    │
+│                                                               │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   Frontend   │  │   Backend    │  │    Qdrant    │      │
+│  │  (Streamlit) │◄─┤   (FastAPI)  │◄─┤   (Vector    │      │
+│  │              │  │              │  │   Database)  │      │
+│  └──────────────┘  └──────┬───────┘  └──────────────┘      │
+│                           │                                  │
+│                           ▼                                  │
+│                    ┌──────────────┐                         │
+│                    │    Ollama    │                         │
+│                    │  (GPU + LLM) │                         │
+│                    │   Qwen Model │                         │
+│                    └──────────────┘                         │
+│                                                               │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │              ArgoCD (GitOps Deployment)               │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### 2. Kurulum
+### Components
+
+| Component | Technology | Description |
+|-----------|------------|-------------|
+| **Frontend** | Streamlit | User interface and chat interface |
+| **Backend** | FastAPI | PDF processing, RAG pipeline, API |
+| **Vector DB** | Qdrant | Vector database for document embeddings |
+| **LLM** | Ollama (Qwen) | Language model running on GPU |
+| **Orchestration** | K3s | Lightweight Kubernetes cluster |
+| **GitOps** | ArgoCD | Automatic deployment and synchronization |
+| **GPU Plugin** | NVIDIA Device Plugin | GPU access in Kubernetes |
+
+---
+
+## ✨ Features
+
+- ✅ **GPU Enabled**: Fast LLM inference on NVIDIA GPU
+- ✅ **Kubernetes Native**: Production-ready deployment with K3s
+- ✅ **GitOps**: Automatic deployment with ArgoCD
+- ✅ **Vector Search**: Semantic search with Qdrant
+- ✅ **RAG Pipeline**: Intelligent Q&A on PDF documents
+- ✅ **Auto Ingest**: PDFs automatically loaded on startup
+- ✅ **Persistent Storage**: Qdrant data stored persistently
+- ✅ **Modern UI**: User-friendly interface with Streamlit
+
+---
+
+## 🔧 Requirements
+
+### Hardware
+- **GPU**: NVIDIA GPU (CUDA-enabled)
+- **RAM**: Minimum 8GB (16GB+ recommended)
+- **Disk**: Minimum 20GB free space
+- **CPU**: 4+ cores recommended
+
+### Software
+- **OS**: Ubuntu 20.04+ (or Debian-based)
+- **NVIDIA Driver**: 525.x or higher
+- **CUDA**: 12.0+ (comes with driver)
+- **Git**: For version control
+
+### Components to be Installed (Makefile installs automatically)
+- K3s (Lightweight Kubernetes)
+- kubectl (Kubernetes CLI)
+- NVIDIA Container Toolkit
+- ArgoCD
+
+---
+
+## 🚀 Quick Start
+
+### 1️⃣ Clone the Repository
 
 ```bash
-# 1. Repository'yi klonlayın
 git clone https://github.com/peler1nl1kelt0s/rag-system.git
 cd rag-system
-
-# 2. .env dosyasını oluşturun
-cp .env.example .env
-# .env dosyasını düzenleyin (GITHUB_TOKEN ekleyin)
-
-# 3. Ubuntu sistem kurulumu (ilk kez)
-make setup-ubuntu
-
-# 4. Tüm sistemi kurun (image'lar GitHub Actions ile otomatik build edilir)
-make up
 ```
 
-### 3. Kullanım
+### 2️⃣ Create Environment File
 
 ```bash
-# ArgoCD arayüzü
-make ui-argo
+# Create .env file
+cat > .env << 'EOF'
+# GitHub Configuration (Required for private repo)
+GITHUB_USER=your_github_username
+GITHUB_TOKEN=your_github_personal_access_token
 
-# Streamlit arayüzü  
-make ui-app
-
-# PDF'leri yükle
-make ingest
-```
-
-## 📋 Komutlar
-
-```bash
-# Temel komutlar
-make up                    # Tüm sistemi kurar
-make destroy              # K3s'i tamamen siler
-make clean                # Sadece uygulamaları siler
-make status               # Pod durumlarını gösterir
-
-# Arayüzler
-make ui-argo              # ArgoCD arayüzü
-make ui-app               # Streamlit frontend
-
-# Veri işlemleri
-make ingest               # PDF'leri Qdrant'a yükler
-
-# Kurulum
-make setup-ubuntu         # Ubuntu sistem kurulumu
-make install-k3s          # K3s kurulumu
-make install-gpu-plugin   # NVIDIA GPU plugin
-make check-gpu            # GPU kontrolü
-
-# Build
-# Image'lar GitHub Actions ile otomatik build edilir
-# Manuel build için: ./scripts/build-images.sh
-```
-
-## ⚙️ Konfigürasyon
-
-`.env` dosyasını düzenleyerek sistemi özelleştirebilirsiniz:
-
-```bash
-# GitHub Configuration
-GITHUB_USER=your_username
-GITHUB_TOKEN=your_token
-
-# GPU Configuration  
+# Model Configuration
 MODEL_NAME=qwen
 
 # Resource Limits
-OLLAMA_MEMORY_LIMIT=4Gi
+OLLAMA_MEMORY_LIMIT=12Gi
 BACKEND_MEMORY_LIMIT=2Gi
+EOF
 ```
 
-## 🔧 Sorun Giderme
+> **Note**: For GitHub Token:
+> 1. GitHub → Settings → Developer Settings → Personal Access Tokens → Tokens (classic)
+> 2. Grant `repo` and `read:packages` permissions
+> 3. Add token to `.env` file
 
-### GPU Sorunları
+### 3️⃣ Install the System
+
 ```bash
-# GPU kontrolü
-nvidia-smi
-make check-gpu
-
-# NVIDIA Container Toolkit kontrolü
-nvidia-ctk --version
+# Install entire system with one command (K3s + GPU + ArgoCD + RAG)
+make up
 ```
 
-### K3s Sorunları
+This command will:
+1. ✅ Install K3s Kubernetes cluster
+2. ✅ Install NVIDIA GPU plugin
+3. ✅ Install ArgoCD
+4. ✅ Create GitHub secrets
+5. ✅ Deploy RAG application
+6. ✅ Automatically load PDFs
+
+**First installation may take 5-10 minutes.**
+
+### 4️⃣ Access Interfaces
+
 ```bash
-# K3s durumu
+# Open Streamlit interface (RAG Chat)
+make ui-app
+# http://localhost:8501
+
+# Open ArgoCD interface (Deployment management)
+make ui-argo
+# http://localhost:8080
+# Username: admin
+# Password: (shown in terminal)
+```
+
+---
+
+## 🎮 Usage
+
+### Chat Interface
+
+1. **Open Streamlit interface**: `make ui-app`
+2. **Ask questions**: Ask questions about Apache documentation
+3. **Get answers**: Qwen model running on GPU provides answers
+
+### Example Questions
+
+```
+- "What is the prototype of ft_substr function?"
+- "What does ft_substr function do?"
+- "What are the parameters of ft_substr?"
+- "What is the return value of ft_substr?"
+```
+
+### PDF Loading
+
+PDFs are placed in `apps/backend/apache_pdfs/` folder and automatically loaded when the system starts.
+
+```bash
+# To add new PDFs:
+1. Copy PDF to apps/backend/apache_pdfs/ folder
+2. Restart backend pod:
+   kubectl rollout restart deployment/rag-backend -n rag-system
+```
+
+---
+
+## 📋 Commands
+
+### Main Commands
+
+```bash
+make up              # Install entire system (K3s + GPU + ArgoCD + RAG)
+make down            # Remove entire system (including K3s)
+make status          # Show pod statuses
+make help            # Show help menu
+```
+
+### Interface Commands
+
+```bash
+make ui-argo         # Open ArgoCD interface (port 8080)
+make ui-app          # Open Streamlit interface (port 8501)
+```
+
+### Installation Steps (Manual)
+
+Normally `make up` does all of this, but for manual installation:
+
+```bash
+make install-k3s           # Install K3s
+make configure-k3s         # Configure K3s
+make install-gpu-plugin    # Install NVIDIA GPU plugin
+make install-argocd        # Install ArgoCD
+make create-secrets        # Create GitHub secrets
+make deploy-app            # Deploy RAG application
+```
+
+---
+
+## ⚙️ Configuration
+
+### Environment Variables (.env)
+
+```bash
+# GitHub Configuration
+GITHUB_USER=your_username          # Your GitHub username
+GITHUB_TOKEN=ghp_xxxxxxxxxxxxx     # GitHub Personal Access Token
+
+# Model Configuration
+MODEL_NAME=qwen                    # LLM model to use
+
+# Resource Limits
+OLLAMA_MEMORY_LIMIT=12Gi          # Memory limit for Ollama
+BACKEND_MEMORY_LIMIT=2Gi          # Memory limit for Backend
+```
+
+### Makefile Variables
+
+```makefile
+APP_NS        = rag-system         # Application namespace
+ARGOCD_NS     = argocd            # ArgoCD namespace
+ARGOCD_PORT   = 8080              # ArgoCD port
+FRONTEND_PORT = 8501              # Streamlit port
+```
+
+### Backend Environment (manifests/04-backend.yaml)
+
+```yaml
+env:
+- name: QDRANT_URL
+  value: "http://qdrant-service.rag-system.svc.cluster.local:6333"
+- name: OLLAMA_URL
+  value: "http://ollama-service.rag-system.svc.cluster.local:11434"
+- name: MODEL_NAME
+  value: "qwen"
+- name: COLLECTION_NAME
+  value: "apache_docs"
+- name: DATA_PATH
+  value: "/data/"
+```
+
+---
+
+## 🔍 Troubleshooting
+
+### 1. K3s Not Starting
+
+**Symptom**: `make up` command stuck at K3s installation
+
+**Solution**:
+```bash
+# Check K3s service status
 sudo systemctl status k3s
-kubectl get nodes
 
-# Log kontrolü
-sudo journalctl -u k3s -f
+# Check K3s logs
+sudo journalctl -u k3s -n 50 --no-pager
+
+# Restart K3s
+sudo systemctl restart k3s
+
+# Check config file
+ls -la /etc/rancher/k3s/k3s.yaml
 ```
 
-### Pod Sorunları
+### 2. GPU Not Recognized
+
+**Symptom**: Ollama pod doesn't see GPU
+
+**Solution**:
 ```bash
-# Pod durumları
-make status
+# Check GPU
+nvidia-smi
 
-# Log kontrolü
-kubectl logs -n rag-system deployment/rag-backend
-kubectl logs -n rag-system deployment/rag-frontend
+# Check NVIDIA Container Toolkit
+nvidia-ctk --version
+
+# Check GPU plugin pods
+kubectl get pods -n kube-system | grep nvidia
+
+# Check GPU node label
+kubectl get nodes -o json | jq '.items[].status.allocatable'
 ```
 
-## 📚 Daha Fazla Bilgi
+### 3. ArgoCD Sync Error
 
-- [K3s Dokümantasyonu](https://k3s.io/)
-- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/)
-- [ArgoCD](https://argo-cd.readthedocs.io/)
-- [Ollama](https://ollama.ai/)
+**Symptom**: ArgoCD application in "OutOfSync" state
 
-## 🤝 Katkıda Bulunma
+**Solution**:
+```bash
+# Open ArgoCD interface
+make ui-argo
 
-1. Fork yapın
-2. Feature branch oluşturun (`git checkout -b feature/amazing-feature`)
-3. Commit yapın (`git commit -m 'Add amazing feature'`)
-4. Push yapın (`git push origin feature/amazing-feature`)
-5. Pull Request oluşturun
+# Manual sync (from UI or CLI)
+kubectl get applications -n argocd
 
-## 📄 Lisans
+# Check secrets
+kubectl get secrets -n argocd | grep github
+kubectl get secrets -n rag-system | grep ghcr
+```
 
-Bu proje MIT lisansı altında lisanslanmıştır.
+### 4. Backend Pod CrashLoopBackOff
+
+**Symptom**: Backend pod keeps restarting
+
+**Solution**:
+```bash
+# Check backend logs
+kubectl logs -n rag-system deployment/rag-backend
+
+# Check if Qdrant and Ollama services are ready
+kubectl get pods -n rag-system
+
+# Restart backend pod
+kubectl rollout restart deployment/rag-backend -n rag-system
+```
+
+### 5. Cannot Access Frontend
+
+**Symptom**: `make ui-app` not working
+
+**Solution**:
+```bash
+# Check if frontend pod is running
+kubectl get pods -n rag-system | grep frontend
+
+# Check service
+kubectl get svc -n rag-system | grep frontend
+
+# Start port-forward manually
+kubectl port-forward svc/rag-frontend-service -n rag-system 8501:8501
+```
+
+### 6. Qdrant Data Lost
+
+**Symptom**: Chat not working, "Qdrant database not ready" error
+
+**Solution**:
+```bash
+# Check Qdrant pod
+kubectl get pods -n rag-system | grep qdrant
+
+# Check PVC
+kubectl get pvc -n rag-system
+
+# Restart backend (will auto ingest)
+kubectl rollout restart deployment/rag-backend -n rag-system
+
+# Follow logs
+kubectl logs -n rag-system deployment/rag-backend -f
+```
+
+### 7. Complete System Reset
+
+```bash
+# Remove entire system
+make down
+
+# Clean .kube config
+rm -rf ~/.kube
+
+# Reinstall
+make up
+```
+
+---
+
+## 📁 Project Structure
+
+```
+rag-system/
+├── apps/
+│   ├── backend/                    # FastAPI backend
+│   │   ├── apache_pdfs/           # PDF documents
+│   │   │   └── en.subject.pdf
+│   │   ├── Dockerfile             # Backend container
+│   │   ├── main.py                # FastAPI application
+│   │   └── requirements.txt       # Python dependencies
+│   └── frontend/                   # Streamlit frontend
+│       ├── Dockerfile             # Frontend container
+│       ├── app.py                 # Streamlit application
+│       └── requirements.txt       # Python dependencies
+├── k3s-gpu/
+│   └── device-plugin-daemonset.yaml  # NVIDIA GPU plugin
+├── manifests/                      # Kubernetes manifests
+│   ├── 01-namespaces.yaml         # Namespace definitions
+│   ├── 02-qdrant.yaml             # Qdrant deployment
+│   ├── 03-ollama-gpu.yaml         # Ollama GPU deployment
+│   ├── 04-backend.yaml            # Backend deployment
+│   ├── 05-frontend.yaml           # Frontend deployment
+│   └── 06-argocd-app.yaml         # ArgoCD application
+├── scripts/
+│   ├── ubuntu-setup.sh            # Ubuntu system setup
+│   └── force-sync.sh              # ArgoCD force sync
+├── Makefile                        # Automation commands
+├── README.md                       # This file
+└── .env                           # Environment variables (to be created)
+```
+
+---
+
+## 🔐 Security Notes
+
+1. **GitHub Token**: Never commit `.env` file
+2. **ArgoCD Password**: Change after first login
+3. **Private Repo**: `ghcr-secret` required if images are in private repo
+4. **Firewall**: Only open ports when necessary
+
+---
+
+## 📊 Performance Notes
+
+### GPU Usage
+- **Ollama**: ~4-8GB VRAM (depending on model size)
+- **Inference**: ~100-500ms (depending on question complexity)
+
+### Memory Usage
+- **Ollama**: 8-12GB RAM
+- **Backend**: 1-2GB RAM
+- **Frontend**: 512MB-1GB RAM
+- **Qdrant**: 500MB-2GB RAM (depending on data size)
+
+### Disk Usage
+- **K3s**: ~2GB
+- **Docker Images**: ~5-8GB
+- **Qdrant Data**: ~500MB-5GB (depending on document count)
+
+---
+
+## 🚀 Advanced
+
+### Using Different Models
+
+```bash
+# Change MODEL_NAME in .env file
+MODEL_NAME=llama2
+
+# Restart Ollama pod
+kubectl rollout restart deployment/ollama -n rag-system
+```
+
+### Adding More PDFs
+
+```bash
+# Add PDFs
+cp your_pdfs/*.pdf apps/backend/apache_pdfs/
+
+# Rebuild image (GitHub Actions does this automatically)
+git add apps/backend/apache_pdfs/
+git commit -m "Add new PDFs"
+git push
+
+# ArgoCD will auto sync
+```
+
+### Increasing Resource Limits
+
+Edit `manifests/03-ollama-gpu.yaml`:
+
+```yaml
+resources:
+  limits:
+    nvidia.com/gpu: 1
+    memory: "16Gi"  # Increased
+    cpu: "8"        # Increased
+```
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Create Pull Request
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 📞 Support
+
+If you're experiencing issues:
+1. Check [Troubleshooting](#-troubleshooting) section
+2. Open an issue on GitHub
+3. Include logs (`kubectl logs` outputs)
+
+---
+
+## 🎯 Roadmap
+
+- [ ] Multi-user support
+- [ ] React/Next.js instead of web UI
+- [ ] More document formats (DOCX, TXT, MD)
+- [ ] Chat history
+- [ ] User authentication
+- [ ] Cloud deployment (GKE, EKS, AKS)
+
+---
+
+**Created by**: peler1nl1kelt0s  
+**Version**: 1.0.0  
+**Last Updated**: 2025
