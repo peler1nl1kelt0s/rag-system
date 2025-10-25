@@ -92,15 +92,20 @@ async def chat(request: ChatRequest):
         
         # 2. Prompt'u oluştur
         prompt_template = f"""
-Sen Apache HTTP Server dökümanlarından sorulara cevap veren bir asistansın. 
-Sadece verilen bağlamdaki bilgileri kullanarak cevap ver. Eğer cevap bağlamda yoksa "Bu konuda bilgim yok" de.
+You are an AI assistant that answers questions based on the provided documents.
 
-Bağlam:
+Your task:
+1. Carefully analyze the information in the given context
+2. Provide the most accurate and detailed answer to the user's question
+3. Base your answer strictly on the context provided
+4. If there is insufficient information in the context, clearly state that
+
+Context (from uploaded documents):
 {context}
 
-Soru: {request.query}
+User Question: {request.query}
 
-Cevap (sadece bağlamdaki bilgileri kullan):
+Please answer the question using the context above. Your answer should be clear, concise, and based solely on the provided information:
 """
         
         # 3. LLM'i (Ollama) çağır

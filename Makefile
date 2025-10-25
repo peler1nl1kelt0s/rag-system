@@ -51,28 +51,68 @@ down:
 install-k3s:
 	@echo "🚀 K3s kurulumu kontrol ediliyor..."
 	@if command -v k3s > /dev/null 2>&1; then \
-		echo "✅ K3s zaten kurulu"; \
+		echo "✅ K3s binary mevcut"; \
 		if ! sudo systemctl is-active --quiet k3s; then \
 			echo "⚠️  K3s servisi durmuş, başlatılıyor..."; \
 			sudo systemctl start k3s; \
-			sleep 5; \
+			echo "⏳ Servisin başlaması bekleniyor (30 saniye)..."; \
+			sleep 30; \
+		else \
+			echo "✅ K3s servisi çalışıyor"; \
 		fi; \
 	else \
 		echo "📦 K3s kuruluyor..."; \
 		curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable=traefik" sh -; \
-		sleep 10; \
-		sudo systemctl enable k3s; \
-		sudo systemctl start k3s; \
+		echo "⏳ K3s servisinin başlaması bekleniyor (60 saniye)..."; \
+		sleep 60; \
+		if ! sudo systemctl is-active --quiet k3s; then \
+			echo "❌ K3s servisi başlatılamadı!"; \
+			echo "🔍 Hata detayları:"; \
+			sudo journalctl -u k3s -n 50 --no-pager; \
+			exit 1; \
+		fi; \
+		echo "✅ K3s servisi başarıyla başlatıldı"; \
 	fi
 
 # K3s konfigürasyonu
 configure-k3s:
 	@echo "🔧 K3s konfigürasyonu yapılıyor..."
-	@if [ ! -f ~/.kube/config ]; then \
-		mkdir -p ~/.kube; \
-		sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config; \
-		sudo chown $(shell whoami):$(shell whoami) ~/.kube/config; \
+	@echo "⏳ K3s config dosyasının oluşmasını bekleniyor..."
+	@COUNTER=0; \
+	until [ -f /etc/rancher/k3s/k3s.yaml ] || [ $$COUNTER -eq 12 ]; do \
+		echo "⏳ Config dosyası henüz yok, bekleniyor... ($$((COUNTER*5)) saniye)"; \
+		sleep 5; \
+		COUNTER=$$((COUNTER+1)); \
+	done; \
+	if [ ! -f /etc/rancher/k3s/k3s.yaml ]; then \
+		echo "❌ K3s config dosyası oluşmadı!"; \
+		echo "🔍 K3s servisi düzgün çalışmıyor olabilir"; \
+		sudo systemctl status k3s --no-pager; \
+		exit 1; \
 	fi
+	@echo "✅ Config dosyası bulundu"
+	@mkdir -p ~/.kube
+	@sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+	@sudo chown $(shell whoami):$(shell whoami) ~/.kube/config
+	@echo "✅ Kubeconfig kopyalandı"
+	@echo "⏳ K3s API'nin hazır olması bekleniyor (max 3 dakika)..."
+	@COUNTER=0; \
+	until kubectl get nodes > /dev/null 2>&1 || [ $$COUNTER -eq 36 ]; do \
+		echo "⏳ K3s API henüz hazır değil, bekleniyor... ($$((COUNTER*5)) saniye)"; \
+		sleep 5; \
+		COUNTER=$$((COUNTER+1)); \
+	done; \
+	if [ $$COUNTER -eq 36 ]; then \
+		echo "❌ K3s API 3 dakika içinde hazır olmadı!"; \
+		echo "🔍 K3s servisi durumu:"; \
+		sudo systemctl status k3s --no-pager; \
+		echo ""; \
+		echo "🔍 Son loglar:"; \
+		sudo journalctl -u k3s -n 30 --no-pager; \
+		exit 1; \
+	fi
+	@echo "✅ K3s hazır!"
+	@kubectl get nodes
 
 # GPU plugin kurulumu
 install-gpu-plugin:
@@ -80,6 +120,7 @@ install-gpu-plugin:
 	@which nvidia-ctk > /dev/null 2>&1 || (echo "❌ NVIDIA Container Toolkit bulunamadı." && exit 1)
 	@sudo nvidia-ctk runtime configure --runtime=containerd
 	@sudo systemctl restart containerd
+	@sleep 5
 	@kubectl apply -f k3s-gpu/device-plugin-daemonset.yaml --validate=false
 	@sleep 10
 
