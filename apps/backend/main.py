@@ -53,21 +53,12 @@ async def startup_event():
         logger.info("Startup: Otomatik PDF yükleme kontrol ediliyor...")
         # PDF dosyası var mı kontrol et
         import glob
-        pdf_files = glob.glob(f"{DATA_PATH}*.pdf")
+        pdf_files = glob.glob(f"{DATA_PATH}**/*.pdf", recursive=True)
         if pdf_files:
             logger.info(f"PDF dosyaları bulundu: {pdf_files}")
-            # Qdrant'ta koleksiyon var mı kontrol et
-            from qdrant_client import QdrantClient
-            client = QdrantClient(url=QDRANT_URL)
-            try:
-                collections = client.get_collections()
-                if COLLECTION_NAME not in [c.name for c in collections.collections]:
-                    logger.info("Koleksiyon bulunamadı, otomatik ingest başlatılıyor...")
-                    await ingest_data()
-                else:
-                    logger.info("Koleksiyon zaten mevcut, otomatik ingest atlanıyor.")
-            except Exception as e:
-                logger.warning(f"Qdrant bağlantı hatası: {e}")
+            # Her zaman yeniden ingest yap (force_recreate=True)
+            logger.info("PDF dosyaları bulundu, otomatik ingest başlatılıyor...")
+            await ingest_data()
         else:
             logger.info("PDF dosyası bulunamadı, otomatik ingest atlanıyor.")
     except Exception as e:
@@ -89,11 +80,11 @@ async def chat(request: ChatRequest):
         
         # 1. Qdrant'ta benzerlik ara
         try:
-            similar_docs = qdrant_client.similarity_search(request.query, k=3)
+            similar_docs = qdrant_client.similarity_search(request.query, k=5)
             if not similar_docs:
                 return {"error": "İlgili döküman bulunamadı. Lütfen farklı bir soru deneyin."}
             
-            context = "\n".join([doc.page_content for doc in similar_docs])
+            context = "\n\n".join([doc.page_content for doc in similar_docs])
             logger.info(f"{len(similar_docs)} döküman bulundu")
         except Exception as e:
             logger.error(f"Qdrant arama hatası: {e}")
@@ -101,11 +92,16 @@ async def chat(request: ChatRequest):
         
         # 2. Prompt'u oluştur
         prompt_template = f"""
-        Sana verilen bağlamı (context) kullanarak soruya cevap ver. Eğer cevap bağlamda yoksa, 'Bilmiyorum' de.
-        Bağlam: {context}
-        Soru: {request.query}
-        Cevap:
-        """
+Sen Apache HTTP Server dökümanlarından sorulara cevap veren bir asistansın. 
+Sadece verilen bağlamdaki bilgileri kullanarak cevap ver. Eğer cevap bağlamda yoksa "Bu konuda bilgim yok" de.
+
+Bağlam:
+{context}
+
+Soru: {request.query}
+
+Cevap (sadece bağlamdaki bilgileri kullan):
+"""
         
         # 3. LLM'i (Ollama) çağır
         logger.info("LLM'e cevap ürettiriliyor...")
@@ -137,7 +133,12 @@ async def ingest_data():
             return {"status": "Yüklenecek PDF dökümanı bulunamadı."}
 
         logger.info(f"{len(documents)} döküman yüklendi. Parçalanıyor...")
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        # Daha büyük chunk'lar kullan (fonksiyon tanımları için)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=2000, 
+            chunk_overlap=300,
+            separators=["\n\n", "\n", ". ", " ", ""]
+        )
         texts = text_splitter.split_documents(documents)
         
         logger.info(f"{len(texts)} parça (chunk) oluşturuldu. Vektör veritabanına yükleniyor...")

@@ -127,7 +127,7 @@ ui-argo:
 # Streamlit arayüzünü port-forward et
 ui-app:
 	@echo "🌐 Streamlit arayüzü: http://localhost:$(FRONTEND_PORT)"
-	@kubectl port-forward svc/rag-frontend -n $(APP_NS) $(FRONTEND_PORT):8501
+	@kubectl port-forward svc/rag-frontend-service -n $(APP_NS) $(FRONTEND_PORT):8501
 
 # Cluster durumunu kontrol et
 status:
